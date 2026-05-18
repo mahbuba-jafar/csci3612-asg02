@@ -145,4 +145,49 @@ class RingBufferTest {
         w.write(3);
         assertEquals(Optional.of(3), lateReader.read().value());
     }
+
+    @Test
+    void testReadResultOk() {
+        ReadResult<String> r = ReadResult.ok("hello");
+        assertEquals(ReadResult.Status.OK, r.status());
+        assertEquals(Optional.of("hello"), r.value());
+        assertEquals(0, r.missedCount());
+    }
+
+    @Test
+    void testReadResultEmpty() {
+        ReadResult<String> r = ReadResult.empty();
+        assertEquals(ReadResult.Status.EMPTY, r.status());
+        assertTrue(r.value().isEmpty());
+        assertEquals(0, r.missedCount());
+    }
+
+    @Test
+    void testReadResultMissed() {
+        ReadResult<String> r = ReadResult.missed(5);
+        assertEquals(ReadResult.Status.MISSED, r.status());
+        assertTrue(r.value().isEmpty());
+        assertEquals(5, r.missedCount());
+    }
+
+    @Test
+    void testWritingBeyondCapacityDoesNotThrow() {
+        RingBuffer<Integer> rb = new RingBuffer<>(3);
+        Writer<Integer> w = rb.writer();
+        assertDoesNotThrow(() -> {
+            for (int i = 0; i < 10; i++) w.write(i);
+        });
+    }
+
+    @Test
+    void testRepeatedReadsOnEmptyReturnEmpty() {
+        RingBuffer<Integer> rb = new RingBuffer<>(5);
+        Reader<Integer> r = rb.createReader();
+        rb.writer().write(1);
+        r.read(); // OK
+        // all subsequent reads should be EMPTY
+        for (int i = 0; i < 5; i++) {
+            assertEquals(ReadResult.Status.EMPTY, r.read().status());
+        }
+    }
 }
