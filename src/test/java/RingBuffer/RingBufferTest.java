@@ -190,4 +190,104 @@ class RingBufferTest {
             assertEquals(ReadResult.Status.EMPTY, r.read().status());
         }
     }
+    @Test
+    void testCapacityLarge() {
+        RingBuffer<Integer> rb = new RingBuffer<>(100);
+        assertEquals(100, rb.capacity());
+    }
+
+    @Test
+    void testLastSeqGrowsCorrectly() {
+        RingBuffer<Integer> rb = new RingBuffer<>(5);
+        Writer<Integer> w = rb.writer();
+        for (int i = 0; i < 5; i++) {
+            w.write(i);
+            assertEquals(i, rb.lastSeq());
+        }
+    }
+
+    @Test
+    void testReadExactlyCapacityItems() {
+        RingBuffer<Integer> rb = new RingBuffer<>(5);
+        Reader<Integer> r = rb.createReader();
+        Writer<Integer> w = rb.writer();
+        for (int i = 0; i < 5; i++) w.write(i);
+        for (int i = 0; i < 5; i++) {
+            assertEquals(ReadResult.Status.OK, r.read().status());
+        }
+        // after draining, should be empty
+        assertEquals(ReadResult.Status.EMPTY, r.read().status());
+    }
+
+    @Test
+    void testSecondReadAfterOneWriteIsEmpty() {
+        RingBuffer<Integer> rb = new RingBuffer<>(5);
+        Reader<Integer> r = rb.createReader();
+        rb.writer().write(10);
+        r.read(); // OK
+        assertEquals(ReadResult.Status.EMPTY, r.read().status());
+    }
+
+    @Test
+    void testMissedResultHasNoValue() {
+        RingBuffer<Integer> rb = new RingBuffer<>(2);
+        Reader<Integer> r = rb.createReader();
+        Writer<Integer> w = rb.writer();
+        w.write(1); w.write(2); w.write(3);
+        ReadResult<Integer> result = r.read();
+        assertEquals(ReadResult.Status.MISSED, result.status());
+        assertTrue(result.value().isEmpty());
+    }
+
+    @Test
+    void testWrapAroundValues() {
+        RingBuffer<Integer> rb = new RingBuffer<>(3);
+        Reader<Integer> r = rb.createReader();
+        Writer<Integer> w = rb.writer();
+        w.write(10); w.write(20); w.write(30); w.write(40);
+        r.read(); // MISSED, advances to seq 1
+        assertEquals(Optional.of(20), r.read().value());
+        assertEquals(Optional.of(30), r.read().value());
+        assertEquals(Optional.of(40), r.read().value());
+        assertEquals(ReadResult.Status.EMPTY, r.read().status());
+    }
+
+    @Test
+    void testFastReaderDoesNotAffectSlowReader() {
+        RingBuffer<String> rb = new RingBuffer<>(5);
+        Reader<String> slow = rb.createReader();
+        Reader<String> fast = rb.createReader();
+        Writer<String> w = rb.writer();
+        w.write("a"); w.write("b");
+        fast.read(); fast.read(); // drain
+        assertEquals(ReadResult.Status.EMPTY, fast.read().status());
+        // slow reader unaffected
+        assertEquals(Optional.of("a"), slow.read().value());
+        assertEquals(Optional.of("b"), slow.read().value());
+    }
+
+    @Test
+    void testReadResultOkToString() {
+        ReadResult<Integer> r = ReadResult.ok(42);
+        assertTrue(r.toString().contains("42"));
+    }
+
+    @Test
+    void testReadResultEmptyToString() {
+        assertEquals("EMPTY", ReadResult.empty().toString());
+    }
+
+    @Test
+    void testReadResultMissedToString() {
+        assertTrue(ReadResult.missed(3).toString().contains("3"));
+    }
+
+    @Test
+    void testLargeNumberOfWrites() {
+        RingBuffer<Integer> rb = new RingBuffer<>(8);
+        Writer<Integer> w = rb.writer();
+        for (int i = 0; i < 1000; i++) w.write(i);
+        assertEquals(999, rb.lastSeq());
+    }
+
 }
