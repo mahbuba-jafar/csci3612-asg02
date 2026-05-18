@@ -290,4 +290,63 @@ class RingBufferTest {
         assertEquals(999, rb.lastSeq());
     }
 
+    @Test
+    void testCapacityOneOverwrite() {
+        // capacity 1: second write should overwrite first
+        RingBuffer<String> rb = new RingBuffer<>(1);
+        Reader<String> r = rb.createReader();
+        Writer<String> w = rb.writer();
+        w.write("first");
+        w.write("second"); // overwrites "first"
+        // reader at seq 0, oldest available = 1, so MISSED
+        ReadResult<String> result = r.read();
+        assertEquals(ReadResult.Status.MISSED, result.status());
+    }
+
+    @Test
+    void testIndexOfNegativeSeq() {
+        // what happens if indexOf is called with negative seq?
+        RingBuffer<Integer> rb = new RingBuffer<>(5);
+        // negative % in Java can return negative — potential bug
+        int idx = rb.indexOf(-1);
+        assertTrue(idx >= 0 && idx < rb.capacity());
+    }
+
+    @Test
+    void testWriterIsNotShared() {
+        // two writer() calls should return different Writer instances
+        RingBuffer<Integer> rb = new RingBuffer<>(5);
+        Writer<Integer> w1 = rb.writer();
+        Writer<Integer> w2 = rb.writer();
+        assertNotSame(w1, w2);
+    }
+
+    @Test
+    void testReaderAfterFullOverwrite() {
+        // write 2x capacity, reader should get MISSED then read latest window
+        RingBuffer<Integer> rb = new RingBuffer<>(3);
+        Reader<Integer> r = rb.createReader();
+        Writer<Integer> w = rb.writer();
+        for (int i = 0; i < 6; i++) w.write(i);
+        // oldest available = 6-3 = 3
+        ReadResult<Integer> result = r.read();
+        assertEquals(ReadResult.Status.MISSED, result.status());
+        assertEquals(3, result.missedCount());
+    }
+
+    @Test
+    void testReaderCreatedMidStreamMissesOldData() {
+        // if buffer is already full when reader is created,
+        // reader should NOT be able to read overwritten items
+        RingBuffer<Integer> rb = new RingBuffer<>(3);
+        Writer<Integer> w = rb.writer();
+        w.write(1); w.write(2); w.write(3); w.write(4); // seq 3, oldest=1
+        Reader<Integer> r = rb.createReader(); // starts at seq 4
+        w.write(5); // seq 4
+        ReadResult<Integer> result = r.read();
+        assertEquals(ReadResult.Status.OK, result.status());
+        assertEquals(Optional.of(5), result.value());
+        // nothing more
+        assertEquals(ReadResult.Status.EMPTY, r.read().status());
+    }
 }
