@@ -43,4 +43,47 @@ class RingBufferTest {
         assertEquals(4, rb.indexOf(9));   // 9 % 5 = 4
         assertEquals(2, rb.indexOf(12));  // 12 % 5 = 2
     }
+
+    @Test
+    void testWriterNotNull() {
+        RingBuffer<Integer> rb = new RingBuffer<>(4);
+        assertNotNull(rb.writer());
+    }
+
+    @Test
+    void testLastSeqAfterWrite() {
+        RingBuffer<Integer> rb = new RingBuffer<>(4);
+        Writer<Integer> w = rb.writer();
+        w.write(42);
+        assertEquals(0, rb.lastSeq());
+    }
+
+    @Test
+    void testReadEmptyBuffer() {
+        RingBuffer<Integer> rb = new RingBuffer<>(5);
+        Reader<Integer> r = rb.createReader();
+        ReadResult<Integer> result = r.read();
+        assertEquals(ReadResult.Status.EMPTY, result.status());
+    }
+
+    @Test
+    void testReadAfterWrite() {
+        RingBuffer<Integer> rb = new RingBuffer<>(5);
+        Reader<Integer> r = rb.createReader();
+        rb.writer().write(99);
+        ReadResult<Integer> result = r.read();
+        assertEquals(ReadResult.Status.OK, result.status());
+        assertEquals(Optional.of(99), result.value());
+    }
+
+    @Test
+    void testReadInOrder() {
+        RingBuffer<Integer> rb = new RingBuffer<>(5);
+        Reader<Integer> r = rb.createReader();
+        Writer<Integer> w = rb.writer();
+        w.write(10); w.write(20); w.write(30);
+        assertEquals(Optional.of(10), r.read().value());
+        assertEquals(Optional.of(20), r.read().value());
+        assertEquals(Optional.of(30), r.read().value());
+    }
 }
