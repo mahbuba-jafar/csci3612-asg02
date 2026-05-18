@@ -86,4 +86,63 @@ class RingBufferTest {
         assertEquals(Optional.of(20), r.read().value());
         assertEquals(Optional.of(30), r.read().value());
     }
+
+    @Test
+    void testSlowReaderGetsMissed() {
+        RingBuffer<Integer> rb = new RingBuffer<>(3);
+        Reader<Integer> r = rb.createReader();
+        Writer<Integer> w = rb.writer();
+        // write more than capacity so first item is overwritten
+        w.write(1); w.write(2); w.write(3); w.write(4);
+        ReadResult<Integer> result = r.read();
+        assertEquals(ReadResult.Status.MISSED, result.status());
+    }
+
+    @Test
+    void testMissedCount() {
+        RingBuffer<Integer> rb = new RingBuffer<>(3);
+        Reader<Integer> r = rb.createReader();
+        Writer<Integer> w = rb.writer();
+        // seqs 0-4, oldest available = 2, reader was at 0, missed = 2
+        w.write(0); w.write(1); w.write(2); w.write(3); w.write(4);
+        ReadResult<Integer> result = r.read();
+        assertEquals(2, result.missedCount());
+    }
+
+    @Test
+    void testAfterMissedReaderContinues() {
+        RingBuffer<Integer> rb = new RingBuffer<>(3);
+        Reader<Integer> r = rb.createReader();
+        Writer<Integer> w = rb.writer();
+        w.write(0); w.write(1); w.write(2); w.write(3); w.write(4);
+        r.read(); // MISSED - advances to seq 2
+        ReadResult<Integer> next = r.read();
+        assertEquals(ReadResult.Status.OK, next.status());
+        assertEquals(Optional.of(2), next.value());
+    }
+
+    @Test
+    void testTwoReadersAreIndependent() {
+        RingBuffer<Integer> rb = new RingBuffer<>(5);
+        Reader<Integer> r1 = rb.createReader();
+        Reader<Integer> r2 = rb.createReader();
+        Writer<Integer> w = rb.writer();
+        w.write(100); w.write(200);
+        assertEquals(Optional.of(100), r1.read().value());
+        // r2 should still be at the beginning
+        assertEquals(Optional.of(100), r2.read().value());
+        assertEquals(Optional.of(200), r2.read().value());
+    }
+
+    @Test
+    void testLateReaderSeesOnlyNewItems() {
+        RingBuffer<Integer> rb = new RingBuffer<>(5);
+        Writer<Integer> w = rb.writer();
+        w.write(1); w.write(2);
+        Reader<Integer> lateReader = rb.createReader();
+        // should be empty - nothing written after reader creation
+        assertEquals(ReadResult.Status.EMPTY, lateReader.read().status());
+        w.write(3);
+        assertEquals(Optional.of(3), lateReader.read().value());
+    }
 }
